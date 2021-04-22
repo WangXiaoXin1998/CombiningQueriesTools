@@ -14,7 +14,7 @@
   <div id='control'>
     <div class="button-group">
       <div class="button-left">
-        <el-button type="primary" size="mini" @click="dialogFormVisible=true"
+        <el-button type="primary" size="mini" @click="addLabel"
           :disabled="!currentNode||(currentNode.label!='分组'&&currentNode.label!='筛选条件')">
           追加条件
         </el-button>
@@ -307,6 +307,8 @@
         this.currentNode.children.push(newChild);
       },
       addLabel() {
+        this.addLabelForm.typeValue = ''
+        this.addLabelForm.value = ''
         this.dialogFormVisible = true
       },
       handleClick(a, b, ev) {
