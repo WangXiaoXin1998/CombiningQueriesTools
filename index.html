@@ -1,0 +1,472 @@
+﻿<meta name="viewport" charset=utf-8″ content="width=device-width, initial-scale=1, user-scalable=no" />
+<html>
+
+<head>
+  <title>多条件查询</title>
+</head>
+<link rel="stylesheet" href="./static/element.css">
+<script src="./static/vue.js"></script>
+<script src="./static/element.js"></script>
+<script src="./static/axios.min.js"></script>
+<script src="./static/qs.min.js"></script>
+
+<body style="background: #29323c">
+  <div id='control'>
+    <div class="button-group">
+      <div class="button-left">
+        <el-button type="primary" size="mini" @click="dialogFormVisible=true"
+          :disabled="!currentNode||(currentNode.label!='分组'&&currentNode.label!='筛选条件')">
+          追加条件
+        </el-button>
+        <el-button type="primary" size="mini" @click="() => appendGroup(currentNode)"
+          :disabled="!currentNode||(currentNode.label!='分组'&&currentNode.label!='筛选条件')">
+          追加分组
+        </el-button>
+      </div>
+      <div class="button-right">
+        <el-button type="primary" size="mini" @click="submitQuery">提交</el-button>
+      </div>
+    </div>
+    <div class="tree">
+      <el-tree :data="data" node-key="id" default-expand-all draggable :allow-drop="allowDrop" :expand-on-click-node="false" @node-click="handleClick">
+        <span class="custom-tree-node" slot-scope="{ node, data }">
+          <span v-if="node.label=='筛选条件'">{{ node.label }}</span>
+          <span v-if="node.label!='筛选条件'">
+            <el-switch
+                class="switch"
+                width='45'
+                v-model = "data.prefix"
+                active-value="and"
+                inactive-value="or"
+                active-text="与"
+                inactive-text="或"
+                active-color="#5fb878"
+                inactive-color="#1c9eff"
+            ></el-switch>
+            <span>{{node.label.split("◆")[0]}}</span>
+            <span class="operation-sign">{{node.label.split("◆")[1]}}</span>
+            <span>{{node.label.split("◆")[2]}}</span>
+          </span>
+          <span>
+            <el-button type="text" size="mini" @click="() => remove(node, data)" v-if="node.id!=1">
+              删除
+            </el-button>
+          </span>
+      </el-tree>
+    </div>
+
+    <el-dialog title="追加条件" :visible.sync="dialogFormVisible">
+      <el-form :model="addLabelForm" label-width="100px" ref="addLabelForm" :model="addLabelForm">
+        <el-form-item label="属性">
+          <el-select class="typeSelect" v-model="addLabelForm.name" @change="radioChange" value-key="label" placeholder="请选择">
+            <el-option v-for="item in addLabelType" :value="item" :key="item.label" :label="item.namecn"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关系">
+          <el-select class="typeSelect" v-model="addLabelForm.typeValue" placeholder="请选择">
+            <el-option value="等于">等于</el-option>
+            <el-option value="不等于">不等于</el-option>
+            <el-option value="大于" v-if="addLabelForm.name.type=='number' || addLabelForm.name.type=='date'">大于</el-option>
+            <el-option value="大于等于" v-if="addLabelForm.name.type=='number' || addLabelForm.name.type=='date'">大于等于</el-option>
+            <el-option value="小于" v-if="addLabelForm.name.type=='number' || addLabelForm.name.type=='date'">小于</el-option>
+            <el-option value="小于等于" v-if="addLabelForm.name.type=='number' || addLabelForm.name.type=='date'">小于等于</el-option>
+            <el-option value="包含" v-if="addLabelForm.name.type=='input'">包含</el-option>
+            <el-option value="不包含" v-if="addLabelForm.name.type=='input'">不包含</el-option>
+            <el-option value="以...开头" v-if="addLabelForm.name.type=='input'">以...开头</el-option>
+            <el-option value="以...结尾" v-if="addLabelForm.name.type=='input'">以...结尾</el-option>
+            <el-option value="为空">为空</el-option>
+            <el-option value="不为空">不为空</el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="数值" v-if="addLabelForm.typeValue && addLabelForm.typeValue!='为空' && addLabelForm.typeValue!='不为空'">
+          <el-input class="inputLabel" v-if="addLabelForm.name.type=='input'" v-model="addLabelForm.value"></el-input>
+          <el-date-picker
+            v-if="addLabelForm.name.type=='date'"
+            v-model="addLabelForm.value"
+            type="datetime"
+            placeholder="选择日期时间"
+            format="yyyy-MM-dd HH:mm:ss"
+            align="right"
+            :picker-options="pickerOptions">
+          </el-date-picker>
+          <el-input-number v-model="addLabelForm.value" v-if="addLabelForm.name.type=='number'" :precision="5" :step="0.00001"></el-input-number>
+          <el-select v-model="addLabelForm.value" placeholder="请选择" v-if="addLabelForm.name.type=='select'">
+            <el-option
+              v-for="item in addLabelForm.options"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value">
+            </el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="dialogFormVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleAddLabel" :disabled="(addLabelForm.typeValue!='为空' && addLabelForm.typeValue!='不为空') && (addLabelForm.name=={} || !addLabelForm.value)">新增</el-button>
+      </div>
+    </el-dialog>
+  </div>
+</body>
+
+<script>
+  var vm = new Vue({
+    el: '#control',
+    data: {
+      id: 1000,
+      value: "等于",
+      currentNode: null,
+      typeMap: new Map(),
+      addLabelForm: {
+        name: {},
+        typeValue: '',
+        value: '',
+        options: {}
+      },
+      queryData: "",
+      addLabelType: [
+        {
+          type: 'select',
+          label: 'nation',
+          namecn: '国家'
+        },
+        {
+          type: 'input',
+          label: 'name',
+          namecn: '姓名'
+        },
+        {
+          type: 'date',
+          label: 'date',
+          namecn: '日期'
+        },
+        {
+          type: 'number',
+          label: 'range',
+          namecn: '范围'
+        },
+      ],
+      pickerOptions: {
+        shortcuts: [{
+          text: '今天',
+          onClick(picker) {
+            picker.$emit('pick', new Date());
+          }
+        }, {
+          text: '昨天',
+          onClick(picker) {
+            const date = new Date();
+            date.setTime(date.getTime() - 3600 * 1000 * 24);
+            picker.$emit('pick', date);
+          }
+        }, {
+          text: '一周前',
+          onClick(picker) {
+            const date = new Date();
+            date.setTime(date.getTime() - 3600 * 1000 * 24 * 7);
+            picker.$emit('pick', date);
+          }
+        }]
+      },
+      dialogFormVisible: false,
+      data: [{
+        id: 1,
+        label: '筛选条件',
+        children: [
+          {
+            id: 2,
+            label: '国家◆等于◆中国',
+            field: 'nation',
+            prefix: 'and',
+            children: []
+          },{
+            id: 4,
+            label: '分组',
+            prefix: 'and',
+            children: [{
+              id: 9,
+              label: '国家◆不为空◆',
+              field: 'nation',
+              prefix: 'and'
+            }, {
+              id: 10,
+              label: '姓名◆不等于◆嘿嘿嘿',
+              field: 'name',
+              prefix: 'and'
+            }, {
+              id: 13,
+              label: '分组',
+              prefix: 'and',
+              children: [{
+                id: 19,
+                label: '国家◆不等于◆英国',
+                field: 'nation',
+                prefix: 'and'
+              },{
+                id: 20,
+                label: '姓名◆包含◆王',
+                field: 'name',
+                prefix: 'or'
+              }]
+            }, {
+              id: 15,
+              label: '范围◆等于◆6',
+              field: 'range',
+              prefix: 'and'
+            }]
+          }
+        ]
+      }],
+      defaultProps: {
+        children: 'children',
+        label: 'label'
+      }
+    },
+    methods: {
+      radioChange(item){
+        this.addLabelForm.typeValue = ''
+        this.addLabelForm.value = ''
+        if ( item.label == 'nation' ){
+          this.addLabelForm.options = [{value:'中国',label:'中国'},{value:'美国',label:'美国'},{value:'印度',label:'印度'}]
+        }
+      },
+      renderQuery(data,id) {
+        let k = 0
+        for( let i of data ){
+          i.head = k++ == 0
+          if(i.children && i.children.length > 0){
+            i.mode = 'group'
+            if ( id ){
+              i.groupid = id
+            }
+            this.renderQuery(i.children,i.id)
+          } else {
+            if(i.label=='分组'&&i.children.length==0){
+              this.$alert('分组子节点不能为空', '提示', {
+                confirmButtonText: '确定'
+              });
+              return false
+            }
+            i.mode = 'condition'
+            i.groupid = id
+            let arr = i.label.split("◆")
+            i.type = this.typeMap.get(arr[1])
+            i.value = arr[2]
+            if(i.type=='eq' || i.type=='nq'){
+              try {
+                if(parseInt(i.value)){
+                  i.fieldType = '1'
+                }
+              } catch { }
+            }
+          }
+        }
+        return data
+      },
+      appendGroup(data) {
+        const that = this
+        const newChild = { id: this.id++, label: '分组', children: [], prefix: "and" };
+        if (!data.children) {
+          this.$set(data, 'children', []);
+        }
+        data.children.push(newChild);
+      },
+      remove(node, data) {
+        const parent = node.parent;
+        const children = parent.data.children || parent.data;
+        const index = children.findIndex(d => d.id === data.id);
+        children.splice(index, 1);
+      },
+      dateFormat(fmt, date) {
+          let ret;
+          const opt = {
+              "Y+": date.getFullYear().toString(),
+              "m+": (date.getMonth() + 1).toString(),
+              "d+": date.getDate().toString(),
+              "H+": date.getHours().toString(),
+              "M+": date.getMinutes().toString(),
+              "S+": date.getSeconds().toString()
+          };
+          for (let k in opt) {
+              ret = new RegExp("(" + k + ")").exec(fmt);
+              if (ret) {
+                  fmt = fmt.replace(ret[1], (ret[1].length == 1) ? (opt[k]) : (opt[k].padStart(ret[1].length, "0")))
+              };
+          };
+          return fmt;
+      },
+      handleAddLabel() {
+        this.dialogFormVisible = false
+        let type = this.addLabelForm.name.type
+        if( type == 'date' ){
+          this.addLabelForm.value = this.dateFormat("YYYY-mm-dd HH:MM:SS", this.addLabelForm.value)
+        }
+        const newChild = { id: this.id++, prefix:"and", field: this.addLabelForm.name.label ,label: this.addLabelForm.name.namecn + "◆" + this.addLabelForm.typeValue + "◆" + this.addLabelForm.value, children: [] };
+        if (!this.currentNode.children) {
+          this.$set(data, 'children', []);
+        }
+        this.currentNode.children.push(newChild);
+      },
+      addLabel() {
+        this.dialogFormVisible = true
+      },
+      handleClick(a, b, ev) {
+        this.currentNode = a
+      },
+      allowDrop(draggingNode, dropNode, type) {
+        if (dropNode.data.label != '分组') {
+          return type !== 'inner'
+        }
+        return true;
+      },
+      submitQuery() {
+        this.queryData = this.renderQuery(this.data[0].children,this.data[0].children.id)
+        if ( !this.queryData ){
+          return
+        }
+        axios.post('http://192.168.10.82:5001/api/v1/convert/test1',{filterSos: this.queryData}).then(res => {
+	        console.log(res.data)
+	      }).catch( err => {
+	        console.log(err)
+        })
+      }
+    },
+    mounted() {
+      let map = new Map()
+      map.set("等于","eq")
+      map.set("不等于","nq")
+      map.set("大于","gt")
+      map.set("大于等于","ge")
+      map.set("小于","lt")
+      map.set("小于等于","le")
+      map.set("包含","contain")
+      map.set("不包含","notContain")
+      map.set("以...开头","start")
+      map.set("以...结尾","end")
+      map.set("为空","null")
+      map.set("不为空","notNull")
+      this.typeMap = map
+    }
+  },
+  );
+</script>
+
+<style>
+  .inputLabel {
+    width: 70%;
+  }
+
+  .typeSelect {
+    width: 150px;
+  }
+
+  .custom-tree-node {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    padding-right: 8px;
+  }
+
+  .button-left {
+    float: left;
+  }
+  .button-right {
+    float: right
+  }
+  .tree {
+    position: absolute;
+    top: 45px;
+    width: 98vw;
+  }
+  .el-tree {
+    background: #434b55;
+    color: #a0a7b4;
+  }
+
+  .el-tree-node:after {
+      border-top: none;
+    }
+    .el-tree-node {
+      position: relative;
+      padding-left: 16px;
+    }
+
+    .el-tree-node__expand-icon.is-leaf{
+      display: none;
+    }
+    .el-tree-node__children {
+      padding-left: 16px;
+    }
+ 
+    .el-tree-node :last-child:before {
+      height: 38px;
+    }
+ 
+    .el-tree > .el-tree-node:before {
+      border-left: none;
+    }
+ 
+    .el-tree > .el-tree-node:after {
+      border-top: none;
+    }
+ 
+    .el-tree-node:before {
+      content: "";
+      left: -4px;
+      position: absolute;
+      right: auto;
+      border-width: 1px;
+    }
+ 
+    .el-tree-node:after {
+      content: "";
+      left: -4px;
+      position: absolute;
+      right: auto;
+      border-width: 1px;
+    }
+ 
+    .el-tree-node:before {
+      border-left: 1px dashed #a0a7b4;
+      bottom: 0px;
+      height: 100%;
+      top: -26px;
+      width: 1px;
+    }
+ 
+    .el-tree-node:after {
+      border-top: 1px dashed #a0a7b4;
+      height: 20px;
+      top: 12px;
+      width: 18px;
+    }
+    
+    .operation-sign {
+      color: red
+    }
+
+    .method-sign {
+      border-radius:50%;
+      color:white;
+      padding-left: 3px;
+      padding-right: 3px;
+      text-align:center;
+      background:#5fb878
+    }
+    .switch .el-switch__label {
+        position: absolute;
+        color: #fff !important;
+        z-index: 1;
+        display: none;
+        margin-top: 5px;
+    }
+    .switch .is-active{
+        display: block;
+    }
+    .switch .el-switch__label--left span{
+        margin-left: 20px;
+    }
+</style>
+
+</html>
