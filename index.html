@@ -58,15 +58,15 @@
       </el-tree>
     </div>
 
-    <el-dialog :title="isEditing?'编辑条件':'追加条件'" :visible.sync="dialogFormVisible">
-      <el-form :model="addLabelForm" label-width="100px" ref="addLabelForm" :model="addLabelForm">
+    <el-dialog :title="isEditing?'编辑条件':'追加条件'" :visible.sync="dialogFormVisible" width="70%">
+      <el-form :model="addLabelForm" label-width="25%" ref="addLabelForm" :model="addLabelForm">
         <el-form-item label="属性">
-          <el-select class="typeSelect" v-model="addLabelForm.name" @change="radioChange" value-key="label" placeholder="请选择">
+          <el-select v-model="addLabelForm.name" @change="radioChange" value-key="label" placeholder="请选择">
             <el-option v-for="item in addLabelType" :value="item" :key="item.label" :label="item.namecn"></el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="关系">
-          <el-select class="typeSelect" v-model="addLabelForm.typeValue" placeholder="请选择">
+          <el-select v-model="addLabelForm.typeValue" placeholder="请选择">
             <el-option value="等于">等于</el-option>
             <el-option value="不等于">不等于</el-option>
             <el-option value="大于" v-if="addLabelForm.name.type=='number' || addLabelForm.name.type=='date'">大于</el-option>
@@ -82,12 +82,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="数值" v-if="addLabelForm.typeValue && addLabelForm.typeValue!='为空' && addLabelForm.typeValue!='不为空'">
-          <el-input class="inputLabel" v-if="addLabelForm.name.type=='input'" v-model="addLabelForm.value"></el-input>
+          <el-input v-if="addLabelForm.name.type=='input'" v-model="addLabelForm.value"></el-input>
           <el-date-picker
             v-if="addLabelForm.name.type=='date'"
             v-model="addLabelForm.value"
             type="datetime"
-            placeholder="选择日期时间"
+            placeholder="选择时间"
             format="yyyy-MM-dd HH:mm:ss"
             align="right"
             :picker-options="pickerOptions">
@@ -397,14 +397,6 @@
 </script>
 
 <style>
-  .inputLabel {
-    width: 70%;
-  }
-
-  .typeSelect {
-    width: 150px;
-  }
-
   .custom-tree-node {
     flex: 1;
     display: flex;
@@ -524,11 +516,13 @@
     .el-dialog__title {
       color: white
     }
-    .el-dialog__body{
+    .el-dialog__body, .el-dialog__footer{
       background: #434b55;
     }
-    .el-dialog__footer{
-      background: #434b55;
+
+    .el-date-editor.el-input, .el-date-editor.el-input__inner, .el-input-number, .el-input{
+      max-width: 220px;
+      width: auto
     }
     /* 提示框属性 */
     .el-message-box {
@@ -538,11 +532,15 @@
     .el-message-box__header {
       background: black;
     }
-    .el-message-box__message p {
+    .el-message-box__message p, .el-message-box__title {
       color: white
     }
-    .el-message-box__title {
-      color: white
+    /* 数字选择器 */
+    .el-icon-minus, .el-icon-plus {
+      line-height: 38px;
+    }
+    .el-input-number__decrease, .el-input-number__increase{
+      height: 38px
     }
 </style>
 
