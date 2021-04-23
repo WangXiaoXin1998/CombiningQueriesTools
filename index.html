@@ -48,6 +48,9 @@
             <span>{{node.label.split("◆")[2]}}</span>
           </span>
           <span>
+            <el-button type="text" size="mini" @click="() => edit(node, data)" v-if="node.id!=1 && data.label!='分组'">
+              编辑
+            </el-button>
             <el-button type="text" size="mini" @click="() => remove(node, data)" v-if="node.id!=1">
               删除
             </el-button>
@@ -55,7 +58,7 @@
       </el-tree>
     </div>
 
-    <el-dialog title="追加条件" :visible.sync="dialogFormVisible">
+    <el-dialog :title="isEditing?'编辑条件':'追加条件'" :visible.sync="dialogFormVisible">
       <el-form :model="addLabelForm" label-width="100px" ref="addLabelForm" :model="addLabelForm">
         <el-form-item label="属性">
           <el-select class="typeSelect" v-model="addLabelForm.name" @change="radioChange" value-key="label" placeholder="请选择">
@@ -92,7 +95,7 @@
           <el-input-number v-model="addLabelForm.value" v-if="addLabelForm.name.type=='number'" :precision="5" :step="0.00001"></el-input-number>
           <el-select v-model="addLabelForm.value" placeholder="请选择" v-if="addLabelForm.name.type=='select'">
             <el-option
-              v-for="item in addLabelForm.options"
+              v-for="item in addLabelForm.name.options"
               :key="item.value"
               :label="item.label"
               :value="item.value">
@@ -102,7 +105,7 @@
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button @click="dialogFormVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleAddLabel" :disabled="(addLabelForm.typeValue!='为空' && addLabelForm.typeValue!='不为空') && (addLabelForm.name=={} || !addLabelForm.value)">新增</el-button>
+        <el-button type="primary" @click="handleSubmitLabel" :disabled="(addLabelForm.typeValue!='为空' && addLabelForm.typeValue!='不为空') && (addLabelForm.name=={} || !addLabelForm.value)">{{isEditing?'修改':'新增'}}</el-button>
       </div>
     </el-dialog>
   </div>
@@ -113,21 +116,20 @@
     el: '#control',
     data: {
       id: 1000,
-      value: "等于",
       currentNode: null,
       typeMap: new Map(),
       addLabelForm: {
-        name: {},
-        typeValue: '',
-        value: '',
-        options: {}
+        name: {}, // {type, label, namecn [,options]}
+        typeValue: '', // 操作符
+        value: '', // 具体数值
       },
-      queryData: "",
+      queryData: "",// 渲染后的date
       addLabelType: [
         {
           type: 'select',
           label: 'nation',
-          namecn: '国家'
+          namecn: '国家',
+          options: [{value:'中国',label:'中国'},{value:'美国',label:'美国'},{value:'印度',label:'印度'}]
         },
         {
           type: 'input',
@@ -145,7 +147,7 @@
           namecn: '范围'
         },
       ],
-      pickerOptions: {
+      pickerOptions: { // 日历选项
         shortcuts: [{
           text: '今天',
           onClick(picker) {
@@ -167,6 +169,7 @@
           }
         }]
       },
+      isEditing: false,
       dialogFormVisible: false,
       data: [{
         id: 1,
@@ -215,32 +218,28 @@
             }]
           }
         ]
-      }],
-      defaultProps: {
-        children: 'children',
-        label: 'label'
-      }
+      }]
     },
     methods: {
+      /* 添加条件中监听type变化 */
       radioChange(item){
         this.addLabelForm.typeValue = ''
         this.addLabelForm.value = ''
-        if ( item.label == 'nation' ){
-          this.addLabelForm.options = [{value:'中国',label:'中国'},{value:'美国',label:'美国'},{value:'印度',label:'印度'}]
-        }
+        this.addLabelForm.options = item.options
       },
+      /* 渲染待提交的query格式 */
       renderQuery(data,id) {
         let k = 0
         for( let i of data ){
           i.head = k++ == 0
-          if(i.children && i.children.length > 0){
+          if(i.children && i.children.length > 0){ // 有子节点 记录下父节点id继续递归
             i.mode = 'group'
             if ( id ){
               i.groupid = id
             }
             this.renderQuery(i.children,i.id)
           } else {
-            if(i.label=='分组'&&i.children.length==0){
+            if(i.label=='分组'&&i.children.length==0){ // 如果是分组节点但分组节点下没有子节点则报错
               this.$alert('分组子节点不能为空', '提示', {
                 confirmButtonText: '确定'
               });
@@ -262,6 +261,7 @@
         }
         return data
       },
+      /* 追加分组 */
       appendGroup(data) {
         const that = this
         const newChild = { id: this.id++, label: '分组', children: [], prefix: "and" };
@@ -270,12 +270,29 @@
         }
         data.children.push(newChild);
       },
+      /* 编辑节点 */
+      edit(node, data){
+        this.isEditing = true
+        console.log(node)
+        console.log(data)
+        this.addLabelForm = {
+          name: this.addLabelType.find(x => x.label == data.field),
+          typeValue: data.label.split("◆")[1],
+          value: data.label.split("◆")[2]
+        }
+        this.dialogFormVisible = true
+      },
+      /* 删除节点 */
       remove(node, data) {
         const parent = node.parent;
         const children = parent.data.children || parent.data;
         const index = children.findIndex(d => d.id === data.id);
         children.splice(index, 1);
       },
+      /* 日期格式化
+       * fmt: YYYY-mm-dd
+       * date: Date()
+       */
       dateFormat(fmt, date) {
           let ret;
           const opt = {
@@ -294,6 +311,28 @@
           };
           return fmt;
       },
+      /* 提交表单 */
+      handleSubmitLabel(){
+        if( this.addLabelForm.typeValue=='为空' || this.addLabelForm.typeValue=='不为空' ){
+          this.addLabelForm.value = ''
+        }
+        if( this.isEditing ){
+          this.handleEditLabel()
+        } else {
+          this.handleAddLabel()
+        }
+      },
+      /* 编辑节点 */
+      handleEditLabel() {
+        this.dialogFormVisible = false
+        let type = this.addLabelForm.name.type
+        if( type == 'date' ){
+          this.addLabelForm.value = this.dateFormat("YYYY-mm-dd HH:MM:SS", this.addLabelForm.value)
+        }
+        this.currentNode.field = this.addLabelForm.name.label;
+        this.currentNode.label = this.addLabelForm.name.namecn + "◆" + this.addLabelForm.typeValue + "◆" + this.addLabelForm.value;
+      },
+      /* 添加节点 */
       handleAddLabel() {
         this.dialogFormVisible = false
         let type = this.addLabelForm.name.type
@@ -306,20 +345,25 @@
         }
         this.currentNode.children.push(newChild);
       },
+      /* 点击事件 添加条件 */
       addLabel() {
+        this.isEditing = false
         this.addLabelForm.typeValue = ''
         this.addLabelForm.value = ''
         this.dialogFormVisible = true
       },
+      /* 监听点击当前节点 */
       handleClick(a, b, ev) {
         this.currentNode = a
       },
+      /* 移动检测，禁止移动到非分组节点下 */
       allowDrop(draggingNode, dropNode, type) {
         if (dropNode.data.label != '分组') {
           return type !== 'inner'
         }
         return true;
       },
+      /* 提交后端转换 */
       submitQuery() {
         this.queryData = this.renderQuery(this.data[0].children,this.data[0].children.id)
         if ( !this.queryData ){
@@ -468,6 +512,37 @@
     }
     .switch .el-switch__label--left span{
         margin-left: 20px;
+    }
+
+    /* 对话框属性 */
+    .el-form-item__label{
+      color: #a0a7b4
+    }
+    .el-dialog__header {
+      background: black;
+    }
+    .el-dialog__title {
+      color: white
+    }
+    .el-dialog__body{
+      background: #434b55;
+    }
+    .el-dialog__footer{
+      background: #434b55;
+    }
+    /* 提示框属性 */
+    .el-message-box {
+      background: #434b55;
+      border: 0px;
+    }
+    .el-message-box__header {
+      background: black;
+    }
+    .el-message-box__message p {
+      color: white
+    }
+    .el-message-box__title {
+      color: white
     }
 </style>
 
